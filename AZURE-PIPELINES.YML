@@ -1,92 +1,43 @@
-name: 1.0.$(Rev:r)
-
 trigger:
-  branches:
-    include:
-    - main
-  paths:
-    exclude:
-    - README.md
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
 
 variables:
-  buildConfiguration: 'Release'
+  imageName: 'metaflow-app'
+  acrName: 'metaflowacrrm557702'
+  resourceGroup: 'MetaFlowGroup'
 
-stages:
-- stage: ProvisionInfra
-  displayName: 'Provisionar Infraestrutura'
-  jobs:
-  - job: Provision
-    displayName: 'Criar Recursos Azure'
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Executar Script de Infraestrutura'
-      inputs:
-        azureSubscription: 'your-azure-subscription'
-        scriptType: 'bash'
-        scriptLocation: 'scriptPath'
-        scriptPath: 'scripts/script-infra-paas.sh'
+steps:
+# 1. Build e Teste com Maven
+- task: Maven@3
+  inputs:
+    mavenPomFile: 'pom.xml'
+    goals: 'clean package'
+    options: '-DskipTests=false'
+    publishJUnitResults: true
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
-- stage: Build
-  displayName: 'Build e Testes'
-  dependsOn: ProvisionInfra
-  jobs:
-  - job: Build
-    displayName: 'Build Application'
-    pool:
-      vmImage: 'ubuntu-latest'
-    
-    steps:
-    - task: Gradle@3
-      displayName: 'Build com Gradle'
-      inputs:
-        gradleWrapperFile: 'gradlew'
-        tasks: 'build -x test'
-        publishJUnitResults: false
-        testResultsFiles: '**/TEST-*.xml'
-        javaHomeOption: 'JDKVersion'
-        jdkVersionOption: '1.21'
-        jdkArchitectureOption: 'x64'
+# 2. Publicar resultados dos testes
+- task: PublishTestResults@2
+  inputs:
+    testRunner: 'JUnit'
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
-    - task: CopyFiles@2
-      displayName: 'Copiar Artefatos'
-      inputs:
-        Contents: 'build/libs/**/*.jar'
-        TargetFolder: '$(Build.ArtifactStagingDirectory)'
-        CleanTargetFolder: true
+# 3. Build e Push da imagem Docker
+- task: Docker@2
+  inputs:
+    containerRegistry: '$(acrName)-connection'
+    repository: '$(imageName)'
+    command: 'buildAndPush'
+    Dockerfile: '**/Dockerfile'
+    tags: 'latest'
 
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publicar Artefatos'
-      inputs:
-        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-        ArtifactName: 'drop'
-        publishLocation: 'Container'
-
-- stage: Deploy
-  displayName: 'Deploy para Web App'
-  dependsOn: Build
-  jobs:
-  - job: Deploy
-    displayName: 'Deploy Application'
-    pool:
-      vmImage: 'ubuntu-latest'
-    
-    steps:
-    - task: DownloadBuildArtifacts@0
-      displayName: 'Download Artefatos'
-      inputs:
-        buildType: 'current'
-        downloadType: 'single'
-        artifactName: 'drop'
-        downloadPath: '$(System.DefaultWorkingDirectory)'
-
-    - task: AzureWebApp@1
-      displayName: 'Deploy para Azure Web App'
-      inputs:
-        azureSubscription: 'your-azure-subscription'
-        appName: 'metaflow-app-rm557702'
-        package: '$(System.DefaultWorkingDirectory)/drop/**/*.jar'
-        runtimeStack: 'JAVA|21'
-        startUpCommand: 'java -jar /home/site/wwwroot/app.jar'
-
+# 4. Deploy no ACI (SCRIPT na pipeline - como seu professor pediu)
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: 'Azure-Connection'
+    scriptType: 'bash'
+    scriptLocation: 'scriptPath'
+    scriptPath: 'scripts/script-deploy-aci.sh'
