@@ -10,22 +10,30 @@ variables:
   resourceGroup: 'MetaFlowGroup'
 
 steps:
-# 1. Build e Teste com Maven
-- task: Maven@3
+- task: Gradle@3
   inputs:
-    mavenPomFile: 'pom.xml'
-    goals: 'clean package'
-    options: '-DskipTests=false'
+    workingDirectory: ''
+    gradleWrapperFile: 'gradlew'
+    gradleOptions: '-Xmx3072m'
+    javaHomeOption: 'JDKVersion'
+    jdkVersionOption: '1.21'
+    jdkArchitectureOption: 'x64'
     publishJUnitResults: true
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    testResultsFiles: '**/TEST-*.xml'
+    tasks: 'build'
 
-# 2. Publicar resultados dos testes
 - task: PublishTestResults@2
   inputs:
     testRunner: 'JUnit'
-    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    testResultsFiles: '**/build/test-results/test/**/TEST-*.xml'
+    testRunTitle: 'Testes Unitários - $(Build.BuildId)'
 
-# 3. Build e Push da imagem Docker
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(System.DefaultWorkingDirectory)/build/libs'
+    ArtifactName: 'app-artifact'
+    publishLocation: 'Container'
+
 - task: Docker@2
   inputs:
     containerRegistry: '$(acrName)-connection'
@@ -34,7 +42,6 @@ steps:
     Dockerfile: '**/Dockerfile'
     tags: 'latest'
 
-# 4. Deploy no ACI (SCRIPT na pipeline - como seu professor pediu)
 - task: AzureCLI@2
   inputs:
     azureSubscription: 'Azure-Connection'

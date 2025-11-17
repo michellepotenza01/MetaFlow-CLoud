@@ -1,13 +1,12 @@
 #!/bin/bash
 echo "=== DEPLOY NO AZURE CONTAINER INSTANCE ==="
 
-# Obter password do ACR
 ACR_PASSWORD=$(az acr credential show --name metaflowacrrm557702 --query "passwords[0].value" --output tsv)
 
-# Criar Container Instance
+echo "Criando Container Instance..."
 az container create \
     --resource-group MetaFlowGroup \
-    --name metaflow-container-$BUILD_ID \
+    --name metaflow-container-$(Build.BuildId) \
     --image metaflowacrrm557702.azurecr.io/metaflow-app:latest \
     --cpu 1 \
     --memory 1.5 \
@@ -21,6 +20,8 @@ az container create \
         SPRING_DATASOURCE_PASSWORD="$DATABASE_PASSWORD" \
         SPRING_JPA_HIBERNATE_DDL_AUTO="update" \
         SPRINGDOC_SWAGGER_UI_ENABLED="true" \
-    --dns-name-label metaflow-$BUILD_ID
+    --dns-name-label metaflow-$(Build.BuildId)
 
 echo "=== CONTAINER INSTANCE CRIADO ==="
+echo "URL: http://metaflow-$(Build.BuildId).brazilsouth.azurecontainer.io:8080"
+echo "Swagger: http://metaflow-$(Build.BuildId).brazilsouth.azurecontainer.io:8080/swagger-ui.html"
